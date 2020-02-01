@@ -1,0 +1,52 @@
+/********************************************************
+  Version 1.1 (28.08.2019)
+  Config must be configured by the user
+******************************************************/
+
+#ifndef _userConfig_H
+#define _userConfig_H  
+
+/********************************************************
+   Advance Config
+******************************************************/
+#define OFFLINEMODUS 1       // 0 = Blynk and WLAN is required 1 = offline mode (ATTENTION SETTINGS ONLY DIRECTLY IN CODE POSSIBLE)
+#define DISPLAY 2            // 1 = U8x8libm, 0 = deactivated, 2 = external 128x64 display
+#define ONLYPID 1            // 1 = only PID without pre-discussion, 0 = PID + pre-discussion
+#define TEMPSENSOR 3         // 1=DS19B20; 2=TSIC306; 3=MAX6675
+#define BREWDETECTION 1      // 0 = off ,1 = Software, 2 = Hardware
+#define FALLBACK 1           // 1: fallback to eeprom values ​​if blynk doesn't work 0: deactivated
+#define TRIGGERTYPE LOW     // LOW = low trigger, HIGH = high trigger relay
+#define OTA false             // true=activate update via OTA
+#define PONE 1               // 1 = P_ON_E (normal), 0 = P_ON_M (special PID mode, ATTENTION different formula for calculation)
+#define GRAFANA 0           // 1 = Markus grafana visualization. Access required, 0 = default, off
+
+// Wifi
+#define AUTH "blynkauth"
+#define D_SSID "SSID"
+#define PASS "PASS"
+
+
+// OTA
+#define OTAHOST "Lelit"   // Name to be shown in ARUDINO IDE Port
+#define OTAPASS "otapass"    // Password for OTA updtates
+
+#define BLYNKADDRESS "blynk.remoteapp.de"         // IP-Address of used blynk server
+//#define BLYNKADDRESS "raspberrypi.local"
+
+
+// PID values ​​for brewer detection offline
+#define AGGBKP 50 // Kp
+#define AGGBTN 0 // Tn 
+#define AGGBTV 20 // Tv
+
+// PID values ​​for offline control
+#define SETPOINT 99 // temperature setpoint
+#define AGGKP 69 // Kp
+#define AGGTN 399 // Tn
+#define AGGTV 0 // Tv
+#define STARTKP 100 // Start Kp during cold start
+#define STARTTN 0 // Start Tn during cold start
+#define STARTTEMP 80 // temperature threshold for deactivating the start Kp
+
+
+#endif // _userConfig_H
