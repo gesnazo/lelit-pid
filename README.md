@@ -8,7 +8,7 @@ Rancilio-Silvia PID für Arduino http://rancilio-pid.de
 
 MASTER VERSION
 
-Version 1.9.6
+Version 1.9.7
 
 Using PlatformIO over Visual Studio Code
 

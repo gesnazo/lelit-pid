@@ -20,10 +20,12 @@
 #define PONE 1               // 1 = P_ON_E (normal), 0 = P_ON_M (special PID mode, ATTENTION different formula for calculation)
 #define GRAFANA 0           // 1 = Markus grafana visualization. Access required, 0 = default, off
 
-// Wifi
+// Wifi & Blynk 
+#define HOSTNAME "lelit"
 #define AUTH "blynkauth"
 #define D_SSID "SSID"
 #define PASS "PASS"
+#define BLYNKPORT 8080
 
 
 // OTA

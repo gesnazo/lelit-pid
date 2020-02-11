@@ -1,5 +1,5 @@
 /********************************************************
-   Version 1.9.6 MASTER (28.08.2019)
+   Version 1.9.7 MASTER (04.02.2020)
   Key facts: major revision
   - Check the PIN Ports in the CODE!
   - Find your changerate of the machine, can be wrong, test it!
@@ -26,8 +26,11 @@
 //Define pins for outputs
 //#define pinRelayVentil    12
 //#define pinRelayPumpe     13
-#define pinRelayVentil    0
-#define pinRelayPumpe     1
+#define PCF8574_PIN0 0
+#define PCF8574_PIN1 1
+
+#define pinRelayVentil    PCF8574_PIN0
+#define pinRelayPumpe     PCF8574_PIN1
 #define pinRelayHeater    14
 
 //Libraries for OTA
@@ -41,7 +44,7 @@
 #include <EEPROM.h>
 #include "RunningAverage.h"
 
-const char* sysVersion PROGMEM  = "Version 1.9.6 Master";
+const char* sysVersion PROGMEM  = "Version 1.9.7 Master";
 
 /********************************************************
   definitions below must be changed in the userConfig.h file
@@ -57,12 +60,13 @@ const boolean ota = OTA;
 const int grafana=GRAFANA;
 
 // Wifi
+const char* hostname = HOSTNAME;
 const char* auth = AUTH;
 const char* ssid = D_SSID;
 const char* pass = PASS;
 
 unsigned long lastWifiConnectionAttempt = millis();
-const unsigned long wifiConnectionDelay = 10000; // try to reconnect every 5 seconds
+const unsigned long wifiConnectionDelay = 10000; // try to reconnect every 10 seconds
 unsigned int wifiReconnects = 0; //number of reconnects
 
 // OTA
@@ -71,6 +75,7 @@ const char* OTApass = OTAPASS;
 
 //Blynk
 const char* blynkaddress  = BLYNKADDRESS;
+const int blynkport = BLYNKPORT;
 
 
 /********************************************************
@@ -80,6 +85,7 @@ int pidON = 1 ;                 // 1 = control loop in closed loop
 int relayON, relayOFF;          // used for relay trigger type. Do not change!
 boolean kaltstart = true;       // true = Rancilio started for first time
 boolean emergencyStop = false;  // Notstop bei zu hoher Temperatur
+int bars = 0; //used for getSignalStrength()
 
 /********************************************************
    moving average - Brüherkennung
@@ -99,6 +105,7 @@ unsigned long  timeBrewdetection = 0 ;
 int timerBrewdetection = 0 ;
 int i = 0;
 int firstreading = 1 ;          // Ini of the field, also used for sensor check
+char debugline[100];
 
 /********************************************************
    PID - Werte Brüherkennung Offline
@@ -140,7 +147,7 @@ unsigned long startZeit = 0;
 ******************************************************/
 boolean sensorError = false;
 int error = 0;
-int maxErrorCounter = 10 ;  //depends on intervaltempmes* , define max seconds for invalid data
+int maxErrorCounter = 10 ; //define maximum number of consecutive polls (of intervaltempmes* duration) to have errors
 
 
 /********************************************************
@@ -161,15 +168,12 @@ U8X8_SSD1306_128X32_UNIVISION_SW_I2C u8x8(/* clock=*/ 5, /* data=*/ 4, /* reset=
 //#include <ACROBOTIC_SSD1306.h>
 #include <Adafruit_SSD1306.h>
 #define OLED_RESET 16
-Adafruit_SSD1306 display(OLED_RESET);
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define XPOS 0
 #define YPOS 1
 #define DELTAY 2
-
-
-#if (SSD1306_LCDHEIGHT != 64)
-#error("Height incorrect, please fix Adafruit_SSD1306.h!");
-#endif
 
 
 /********************************************************
@@ -256,7 +260,7 @@ float Temperatur_C = 0;
   Delay time between a temperature readings
   from the temperature sensor (ms).
 */
-#define DELAY_TIME 250
+//#define DELAY_TIME 250
 
 //#define SCK_PIN 1
 //#define CS_PIN 0
@@ -264,7 +268,7 @@ float Temperatur_C = 0;
 #define CS_PIN 13
 #define SO_PIN 2
 Thermocouple* thermocouple = NULL;
-const uint8_t CS_PCF8574 = 0;
+
 RunningAverage myRA(READINGS_NUMBER);
 
 PCF8574 pcf8574(0x20);
@@ -398,7 +402,7 @@ void displaymessage(String displaymessagetext, String displaymessagetext2) {
     display.println(displaymessagetext);
     display.print(displaymessagetext2);
     //Rancilio startup logo
-    display.drawBitmap(41,2, startLogo_bits_coffee,startLogo_width, startLogo_height, WHITE);
+    display.drawBitmap(41,1, startLogo_bits_coffee,startLogo_width, startLogo_height, WHITE);
     //draw circle
     //display.drawCircle(63, 24, 20, WHITE);
     display.display();
@@ -455,9 +459,9 @@ void movAvg() {
   if (readIndex >= numReadings - 1) {
     // ...wrap around to the beginning:
     readIndex = 0;
+  } else {
+    readIndex++;
   }
-  readIndex++;
-
 }
 
 
@@ -470,13 +474,15 @@ boolean checkSensor(float tempInput) {
   /********************************************************
     sensor error
   ******************************************************/
-  if ((tempInput < 0 || abs(tempInput - previousInput) > 25) && !sensorError) {
+ if ( ( tempInput < 0 || tempInput > 150 || abs(tempInput - previousInput) > 25) && !sensorError) {
     error++;
     sensorOK = false;
     DEBUG_print("Error counter: ");
     DEBUG_println(error);
     DEBUG_print("temp delta: ");
     DEBUG_println(tempInput);
+    sprintf(debugline, "WARN: temperature sensor reading: consec_errors=%d, temp_current=%f, temp_prev=%f", error, tempInput, previousInput);
+    DEBUG_println(debugline);
   } else if (tempInput > 0) {
     error = 0;
     sensorOK = true;
@@ -486,6 +492,8 @@ boolean checkSensor(float tempInput) {
     DEBUG_print("Sensor Error");
     DEBUG_println(Input);
   } else if (error == 0) {
+    sprintf(debugline, "ERROR: temperature sensor malfunction: temp_current=%f, temp_prev=%f", tempInput, previousInput);
+    DEBUG_println(debugline);
     sensorError = false ;
   }
 
@@ -507,7 +515,7 @@ void refreshTemp() {
   {
     if (currentMillistemp - previousMillistemp >= intervaltempmesds18b20)
     {
-      previousMillistemp += intervaltempmesds18b20;
+      previousMillistemp = currentMillistemp;
       sensors.requestTemperatures();
       if (!checkSensor(sensors.getTempCByIndex(0)) && firstreading == 0) return;  //if sensor data is not valid, abort function
       Input = sensors.getTempCByIndex(0);
@@ -522,7 +530,7 @@ void refreshTemp() {
   {
     if (currentMillistemp - previousMillistemp >= intervaltempmestsic)
     {
-      previousMillistemp += intervaltempmestsic;
+      previousMillistemp = currentMillistemp;
       /*  variable "temperature" must be set to zero, before reading new data
             getTemperature only updates if data is valid, otherwise "temperature" will still hold old values
       */
@@ -701,7 +709,8 @@ void printScreen() {
     u8x8.setCursor(6, 3);
     u8x8.print(Output);
   }
-  if (Display == 2 && !sensorError) {
+  if (Display == 2 && !sensorError)
+  {
     display.clearDisplay();
     display.drawBitmap(0,0, logo_bits,logo_width, logo_height, WHITE);
     display.setTextSize(1);
@@ -800,7 +809,7 @@ void sendToBlynk() {
   if (Offlinemodus != 0) return;
   unsigned long currentMillisBlynk = millis();
   if (currentMillisBlynk - previousMillisBlynk >= intervalBlynk) {
-    previousMillisBlynk += intervalBlynk;
+    previousMillisBlynk = currentMillisBlynk;
     if (Blynk.connected()) {
       if (grafana == 1) {
         Blynk.virtualWrite(V60, Input, Output,bPID.GetKp(),bPID.GetKi(),bPID.GetKd(),setPoint );
@@ -853,6 +862,32 @@ void brewdetection() {
       timeBrewdetection = millis() ;
       timerBrewdetection = 1 ;
     }
+  }
+}
+
+/********************************************************
+  Get Wifi signal strength and set bars for display
+*****************************************************/
+void getSignalStrength(){
+  if (Offlinemodus == 1) return;
+  
+  long rssi;
+  if (WiFi.status() == WL_CONNECTED) {
+    rssi = WiFi.RSSI();  
+  } else {
+    rssi = -100;
+  }
+
+  if (rssi >= -50) { 
+    bars = 4;
+  } else if (rssi < -50 & rssi >= -65) {
+    bars = 3;
+  } else if (rssi < -65 & rssi >= -75) {
+    bars = 2;
+  } else if (rssi < -75 & rssi >= -80) {
+    bars = 1;
+  } else {
+    bars = 0;
   }
 }
 
@@ -934,11 +969,12 @@ void setup() {
      BLYNK & Fallback offline
   ******************************************************/
   if (Offlinemodus == 0) {
+    WiFi.hostname(hostname);
 
     if (fallback == 0) {
 
       displaymessage("Connect to Blynk", "no Fallback");
-      Blynk.begin(auth, ssid, pass, blynkaddress, 8080);
+      Blynk.begin(auth, ssid, pass, blynkaddress, blynkport);
     }
 
     if (fallback == 1) {
@@ -1085,7 +1121,14 @@ void setup() {
     sensors.getAddress(sensorDeviceAddress, 0);
     sensors.setResolution(sensorDeviceAddress, 10) ;
     sensors.requestTemperatures();
+    Input = sensors.getTempCByIndex(0);
   }
+
+  if (TempSensor == 2) {
+     temperature = 0;
+     Sensor1.getTemperature(&temperature);
+     Input = Sensor1.calc_Celsius(&temperature);
+   }
 
   #if (TEMPSENSOR == 3)
   if (TempSensor == 3) {
@@ -1231,7 +1274,7 @@ void loop() {
     //update display if time interval xpired
     unsigned long currentMillisDisplay = millis();
     if (currentMillisDisplay - previousMillisDisplay >= intervalDisplay) {
-      previousMillisDisplay += intervalDisplay;
+      previousMillisDisplay = currentMillisDisplay;
       printScreen();
     }
 
